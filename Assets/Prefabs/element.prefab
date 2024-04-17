@@ -73,7 +73,7 @@ SpriteRenderer:
   m_LightmapParameters: {fileID: 0}
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 0
+  m_SortingOrder: 5
   m_Sprite: {fileID: 21300000, guid: ff21cfdfc35dc6340a0efa7e937de51d, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -97,13 +97,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d6543927ae1617f44afb2a44410b2886, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  sprites:
+  elementSprites:
+  - {fileID: 21300000, guid: 0efaa6a727e93ab4d8ac0583043a5b16, type: 3}
+  - {fileID: 21300000, guid: 2df9754d444bb0a47bcde457994198a1, type: 3}
   - {fileID: 21300000, guid: ff21cfdfc35dc6340a0efa7e937de51d, type: 3}
   - {fileID: 21300000, guid: 72e45b12b8977894498ab1ed38513d2e, type: 3}
-  - {fileID: 21300000, guid: 0efaa6a727e93ab4d8ac0583043a5b16, type: 3}
   - {fileID: 21300000, guid: ab53eb1585a40ba4184f3dd828f36e74, type: 3}
-  - {fileID: 21300000, guid: 2df9754d444bb0a47bcde457994198a1, type: 3}
-  type: 3
-  isRowClearItem: 0
-  isColumnClearItem: 0
-  isBomb: 0
+  jellyBeanSprite: {fileID: 21300000, guid: 371a0de576164cc47a1975a6f082283b, type: 3}
+  lollipopSprite: {fileID: 21300000, guid: cefd0954bd75c0847956c83d41f5c0ce, type: 3}
+  rowClearItemPrefab: {fileID: 5450528824908052955, guid: 56df3a7793e48dd4db36f6531306f979, type: 3}
+  columnClearItemPrefab: {fileID: 42977161589015239, guid: d5f6df85087d5f54ba681499c9867b03, type: 3}
+  bombItemPrefab: {fileID: 5614592895092388023, guid: c63528162790ce04aa83fddb39391169, type: 3}
+  targetSignPrefab: {fileID: 497474676185276206, guid: 730375d2ddd99bf49bce34eedecfe705, type: 3}
+  type: -1

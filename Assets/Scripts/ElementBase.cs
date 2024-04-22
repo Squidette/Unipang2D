@@ -45,7 +45,8 @@ public class ElementBase : MonoBehaviour
     public int type;
 
     // 아이템인지 여부
-    AttachableItem attachableItem = AttachableItem.NONE;
+    public AttachableItem attachedItemType = AttachableItem.NONE;
+    private GameObject attachedItemObject;
 
     void Awake()
     {
@@ -84,28 +85,31 @@ public class ElementBase : MonoBehaviour
 
     public void AttachItem(AttachableItem i)
     {
-        if (i == AttachableItem.NONE) return;
-        if (attachableItem != AttachableItem.NONE) return;
         if (type >= elementSprites.Length) return;
 
-        attachableItem = i;
-
-        GameObject item = new GameObject();
-
-        switch (attachableItem)
+        switch (i)
         {
             case AttachableItem.ROWCLEAR:
-                item = Instantiate(rowClearItemPrefab, transform.position, Quaternion.identity);
+                if (attachedItemObject != null) Destroy(attachedItemObject);
+                attachedItemObject = Instantiate(rowClearItemPrefab, transform.position, Quaternion.identity);
+                attachedItemObject.transform.parent = transform;
                 break;
             case AttachableItem.COLUMNCLEAR:
-                item = Instantiate(columnClearItemPrefab, transform.position, Quaternion.identity);
+                if (attachedItemObject != null) Destroy(attachedItemObject);
+                attachedItemObject = Instantiate(columnClearItemPrefab, transform.position, Quaternion.identity);
+                attachedItemObject.transform.parent = transform;
                 break;
             case AttachableItem.BOMB:
-                item = Instantiate(bombItemPrefab, transform.position, Quaternion.identity);
+                if (attachedItemObject != null) Destroy(attachedItemObject);
+                attachedItemObject = Instantiate(bombItemPrefab, transform.position, Quaternion.identity);
+                attachedItemObject.transform.parent = transform;
+                break;
+            case AttachableItem.NONE:
+                if (attachedItemObject != null) Destroy(attachedItemObject);
                 break;
         }
 
-        item.transform.parent = transform;
+        attachedItemType = i;
     }
 
     // 테스트용
@@ -113,7 +117,6 @@ public class ElementBase : MonoBehaviour
     {
         if (targetSignObject == null)
         {
-            targetSignObject = new GameObject();
             targetSignObject = Instantiate(targetSignPrefab, transform.position, Quaternion.identity);
             targetSignObject.transform.parent = transform;
         }

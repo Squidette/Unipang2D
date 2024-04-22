@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Unity.VisualScripting;
+using UnityEditor.Experimental.GraphView;
 using UnityEngine;
 
 enum Direction
@@ -14,6 +15,12 @@ struct Coords
 {
     public int row;
     public int col;
+
+    public Coords(int row, int column)
+    {
+        this.row = row;
+        col = column;
+    }
 }
 
 public class UnipangManager : MonoBehaviour
@@ -22,7 +29,7 @@ public class UnipangManager : MonoBehaviour
     public GameObject elementPrefab;
 
     /// 게임 초기화 관련
-    
+
     // 원소의 종류 개수
     public int numOfElementTypes;
 
@@ -33,8 +40,11 @@ public class UnipangManager : MonoBehaviour
     // 입력 관련
     Coords latestClickedCoords;
 
-    Coords latestSwappedCoords;
-    Direction latestSwappedDirection;
+    Coords latestSwappedCoords1;
+    Coords latestSwappedCoords2;
+
+    //public bool canSwap = true;
+    //bool firstSwapActions = false; // true가 되었을때 첫 번째 스왑시에만 가능한 효과들을 발동시킬 것이다
 
     /// 유니팡 행렬
     private GameObject[,] elementArray;
@@ -46,15 +56,14 @@ public class UnipangManager : MonoBehaviour
         myCamera.orthographicSize = unipangGameCol;
         elementArray = new GameObject[unipangGameRow, unipangGameCol];
 
-        latestSwappedCoords.row = -1;
-        latestSwappedCoords.col = -1;
+        latestSwappedCoords1.row = -1;
+        latestSwappedCoords1.col = -1;
 
         // 초기화 랜덤 배정
         for (int r = 0; r < elementArray.GetLength(0); r++)
         {
             for (int c = 0; c < elementArray.GetLength(1); c++)
             {
-                // 원소 오브젝트 생성
                 GameObject element = Instantiate(elementPrefab, Vector3.zero, Quaternion.identity);
 
                 // 타입 지정하기
@@ -72,7 +81,7 @@ public class UnipangManager : MonoBehaviour
         UpdateElementCoordsInfo();
     }
 
-    /// [Visual Effects] 연산된 행렬 위치 정보를 행렬내 원소들에게 알려주고 해당 위치로 이동하게 합니다
+    /// 01 연산된 행렬 위치 정보를 행렬내 원소들에게 알려주고 해당 위치로 이동하게 함
     void UpdateElementCoordsInfo()
     {
         for (int r = 0; r < elementArray.GetLength(0); r++)
@@ -86,59 +95,156 @@ public class UnipangManager : MonoBehaviour
 
     /// [유니팡 핵심 연산]
 
-    /// 01 배열의 모든 3개이상 반복원소들을 검출 + 아이템 검출
-    void AddCoordsToHashSet_Row(HashSet<Coords> mySet, int currentRow, int baseIndex, int succession) // succession = 2는 3연속, succession = 3은 4연속, ...
+    /// 02 터지는 아이템의 효과 발동
+
+    // Coords가 그리드 내의 유효한 좌표인지 확인하고 해쉬셋에 추가
+    void AddCoordsToHashSet_s(HashSet<Coords> mySet, Coords coord)
     {
+        if (coord.row < 0) return;
+        if (elementArray.GetLength(0) <= coord.row) return;
+        if (coord.col < 0) return;
+        if (elementArray.GetLength(1) <= coord.col) return;
+
+        if (elementArray[coord.row, coord.col].GetComponent<ElementBase>().type >= numOfElementTypes) return;
+
+        mySet.Add(coord);
+    }
+
+    // 아이템이 터지면 효과를 발동해준다 (열 터뜨리기, 행 터뜨리기, 폭탄 터뜨리기) - 해쉬셋에 변화가 없으면 false를 반환한다
+    bool AddItemEffectsToHashSet(HashSet<Coords> mySet)
+    {
+        HashSet<Coords> setToBePoppedByItems = new HashSet<Coords>();
+
+        foreach (Coords element in mySet)
+        {
+            if (elementArray[element.row, element.col].GetComponent<ElementBase>().attachedItemType == AttachableItem.ROWCLEAR)
+            {
+                for (int c = 0; c < elementArray.GetLength(1); c++)
+                {
+                    AddCoordsToHashSet_s(setToBePoppedByItems, new Coords(element.row, c));
+                }
+            }
+            else if (elementArray[element.row, element.col].GetComponent<ElementBase>().attachedItemType == AttachableItem.COLUMNCLEAR)
+            {
+                for (int r = 0; r < elementArray.GetLength(0); r++)
+                {
+                    AddCoordsToHashSet_s(setToBePoppedByItems, new Coords(r, element.col));
+                }
+            }
+            else if (elementArray[element.row, element.col].GetComponent<ElementBase>().attachedItemType == AttachableItem.BOMB)
+            {
+                AddCoordsToHashSet_s(setToBePoppedByItems, new Coords(element.row - 1, element.col - 1));
+                AddCoordsToHashSet_s(setToBePoppedByItems, new Coords(element.row - 1, element.col + 0));
+                AddCoordsToHashSet_s(setToBePoppedByItems, new Coords(element.row - 1, element.col + 1));
+                AddCoordsToHashSet_s(setToBePoppedByItems, new Coords(element.row, element.col - 1));
+                AddCoordsToHashSet_s(setToBePoppedByItems, new Coords(element.row, element.col + 1));
+                AddCoordsToHashSet_s(setToBePoppedByItems, new Coords(element.row + 1, element.col - 1));
+                AddCoordsToHashSet_s(setToBePoppedByItems, new Coords(element.row + 1, element.col + 0));
+                AddCoordsToHashSet_s(setToBePoppedByItems, new Coords(element.row + 1, element.col + 1));
+            }
+        }
+
+        if (setToBePoppedByItems == null) return false;
+
+        foreach (Coords element in setToBePoppedByItems)
+        {
+            mySet.Add(element);
+        }
+
+        return true;
+    }
+    
+    /// 03 배열의 모든 3개이상 반복원소들을 검출 + 아이템 검출
+    void AddCoordsToHashSetAndAttachItem_Row(HashSet<Coords> mySet, int currentRow, int baseIndex, int succession) // succession = 2는 3연속, succession = 3은 4연속, ...
+    {
+        int rowClearItemIndex = -1;
+        if (succession == 3)
+        {
+            rowClearItemIndex = baseIndex + Random.Range(0, 4);
+        }
+
+        int jellyBeanItemIndex = -1;
+        if (succession >= 4)
+        {
+            jellyBeanItemIndex = baseIndex + 2;
+        }
+
         for (int i = baseIndex; i <= baseIndex + succession; i++)
         {
             Coords newCoord;
             newCoord.row = currentRow;
             newCoord.col = i;
 
-            if (mySet.Contains(newCoord))
+            // 젤리빈 아이템 검출
+            if (jellyBeanItemIndex != -1 && i == jellyBeanItemIndex)
             {
-                // 폭탄 아이템 장착
+                elementArray[currentRow, i].GetComponent<ElementBase>().SetType(numOfElementTypes + 1);
+                mySet.Remove(newCoord);
+            }
+            // 행 클리어 아이템 검출
+            else if (rowClearItemIndex != -1 && i == rowClearItemIndex)
+            {
+                elementArray[currentRow, i].GetComponent<ElementBase>().AttachItem(AttachableItem.ROWCLEAR);
+                mySet.Remove(newCoord);
+            }
+            // 폭탄 아이템 검출
+            else if (mySet.Contains(newCoord))
+            {
                 elementArray[currentRow, i].GetComponent<ElementBase>().AttachItem(AttachableItem.BOMB);
-                mySet.Remove(newCoord); // 처음 폭탄이 된 원소는 안 사라지고 남아 있음
+                mySet.Remove(newCoord);
             }
             else
             {
                 mySet.Add(newCoord);
             }
         }
+    }
 
+    void AddCoordsToHashSetAndAttachItem_Column(HashSet<Coords> mySet, int currentColumn, int baseIndex, int succession) // succession = 2는 3연속, succession = 3은 4연속, ...
+    {
+        int columnClearItemIndex = -1;
         if (succession == 3)
         {
-            int randomInt = Random.Range(0, 4);
-            elementArray[currentRow, baseIndex + randomInt].GetComponent<ElementBase>().AttachItem(AttachableItem.ROWCLEAR);
+            columnClearItemIndex = baseIndex + Random.Range(0, 4);
         }
-    }
-    void AddCoordsToHashSet_Column(HashSet<Coords> mySet, int currentColumn, int baseIndex, int succession)
-    {
+
+        int jellyBeanItemIndex = -1;
+        if (succession >= 4)
+        {
+            jellyBeanItemIndex = baseIndex + 2;
+        }
+
         for (int i = baseIndex; i <= baseIndex + succession; i++)
         {
             Coords newCoord;
             newCoord.row = i;
             newCoord.col = currentColumn;
 
-            if (mySet.Contains(newCoord))
+            // 젤리빈 아이템 검출
+            if (jellyBeanItemIndex != -1 && i == jellyBeanItemIndex)
             {
-                // 폭탄 아이템 장착
+                elementArray[i, currentColumn].GetComponent<ElementBase>().SetType(numOfElementTypes + 1);
+                mySet.Remove(newCoord);
+            }
+            // 행 클리어 아이템 검출
+            else if (columnClearItemIndex != -1 && i == columnClearItemIndex)
+            {
+                elementArray[i, currentColumn].GetComponent<ElementBase>().AttachItem(AttachableItem.COLUMNCLEAR);
+                mySet.Remove(newCoord);
+            }
+            // 폭탄 아이템 검출
+            else if (mySet.Contains(newCoord))
+            {
                 elementArray[i, currentColumn].GetComponent<ElementBase>().AttachItem(AttachableItem.BOMB);
-                mySet.Remove(newCoord); // 처음 폭탄이 된 원소는 안 사라지고 남아 있음
+                mySet.Remove(newCoord);
             }
             else
             {
                 mySet.Add(newCoord);
             }
         }
-
-        if (succession == 3)
-        {
-            int randomInt = Random.Range(0, 4);
-            elementArray[baseIndex + randomInt, currentColumn].GetComponent<ElementBase>().AttachItem(AttachableItem.ROWCLEAR);
-        }
     }
+
     void AddRowSuccessionToHashSet(HashSet<Coords> mySet, int rowIndex)
     {
         int baseIndex = 0;
@@ -156,15 +262,16 @@ public class UnipangManager : MonoBehaviour
             else
             {
                 // 만약, 지금까지 세고 있던 카운트가 3연속(succession = 2) 이상이었으면 해당 정보를 해시셋에 추가
-                if (succession >= 2 && currentBase < numOfElementTypes) AddCoordsToHashSet_Row(mySet, rowIndex, baseIndex, succession);
+                if (succession >= 2 && currentBase < numOfElementTypes) AddCoordsToHashSetAndAttachItem_Row(mySet, rowIndex, baseIndex, succession);
                 baseIndex = c;
                 currentBase = elementArray[rowIndex, c].GetComponent<ElementBase>().type;
                 succession = 0;
             }
         }
         // 행 검사가 끝나고 나서도 마지막 원소들이 반복되는지 확인해줘야 한다
-        if (succession >= 2 && currentBase < numOfElementTypes) AddCoordsToHashSet_Row(mySet, rowIndex, baseIndex, succession);
+        if (succession >= 2 && currentBase < numOfElementTypes) AddCoordsToHashSetAndAttachItem_Row(mySet, rowIndex, baseIndex, succession);
     }
+
     void AddColumnSuccessionToHashSet(HashSet<Coords> mySet, int columnIndex)
     {
         int baseIndex = 0;
@@ -182,15 +289,16 @@ public class UnipangManager : MonoBehaviour
             else
             {
                 // 만약, 지금까지 세고 있던 카운트가 3연속(succession = 2) 이상이었으면 해당 정보를 해시셋에 추가
-                if (succession >= 2 && currentBase < numOfElementTypes) AddCoordsToHashSet_Column(mySet, columnIndex, baseIndex, succession);
+                if (succession >= 2 && currentBase < numOfElementTypes) AddCoordsToHashSetAndAttachItem_Column(mySet, columnIndex, baseIndex, succession);
                 baseIndex = r;
                 currentBase = elementArray[r, columnIndex].GetComponent<ElementBase>().type;
                 succession = 0;
             }
         }
         // 열 검사가 끝나고 나서도 마지막 원소들이 반복되는지 확인해줘야 한다
-        if (succession >= 2 && currentBase < numOfElementTypes) AddCoordsToHashSet_Column(mySet, columnIndex, baseIndex, succession);
+        if (succession >= 2 && currentBase < numOfElementTypes) AddCoordsToHashSetAndAttachItem_Column(mySet, columnIndex, baseIndex, succession);
     }
+
     HashSet<Coords> GetSuccessiveCoordsInArr()
     {
         HashSet<Coords> successiveCoords = new HashSet<Coords>();
@@ -324,16 +432,16 @@ public class UnipangManager : MonoBehaviour
         {
             for (int c = 0; c < elementArray.GetLength(1) - 1; c++)
             {
-                SwapElementsInArray(r, c, Direction.RIGHT);
+                SwapElementsInArray(new Coords(r, c), Direction.RIGHT);
 
                 if (SuccessionExistsInRow(r) || SuccessionExistsInColumn(c) || SuccessionExistsInColumn(c + 1))
                 {
                     // 찾으면 배열을 원래대로 되돌려 놓고 return true
-                    SwapElementsInArray(r, c, Direction.RIGHT);
+                    SwapElementsInArray(new Coords(r, c), Direction.RIGHT);
                     return true;
                 }
                 // 못찾아도 되돌려 놓기
-                SwapElementsInArray(r, c, Direction.RIGHT);
+                SwapElementsInArray(new Coords(r, c), Direction.RIGHT);
             }
         }
 
@@ -342,16 +450,16 @@ public class UnipangManager : MonoBehaviour
         {
             for (int r = 0; r < elementArray.GetLength(0) - 1; r++)
             {
-                SwapElementsInArray(r, c, Direction.DOWN);
+                SwapElementsInArray(new Coords(r, c), Direction.DOWN);
 
                 if (SuccessionExistsInColumn(c) || SuccessionExistsInRow(r) || SuccessionExistsInRow(r + 1))
                 {
                     // 찾으면 배열을 원래대로 되돌려 놓고 return true
-                    SwapElementsInArray(r, c, Direction.DOWN);
+                    SwapElementsInArray(new Coords(r, c), Direction.DOWN);
                     return true;
                 }
                 // 못찾아도 되돌려 놓기
-                SwapElementsInArray(r, c, Direction.DOWN);
+                SwapElementsInArray(new Coords(r, c), Direction.DOWN);
             }
         }
 
@@ -359,16 +467,16 @@ public class UnipangManager : MonoBehaviour
     }
 
     /// [게임 진행 관련]
-    bool SwapElementsInArray(int row, int col, Direction dir)
+    bool SwapElementsInArray(Coords selectedCoords, Direction directionToChange)
     {
         // 예외처리들
-        if (row < 0 || row >= elementArray.GetLength(0)) return false;
-        if (col < 0 || col >= elementArray.GetLength(1)) return false;
+        if (selectedCoords.row < 0 || selectedCoords.row >= elementArray.GetLength(0)) return false;
+        if (selectedCoords.col < 0 || selectedCoords.col >= elementArray.GetLength(1)) return false;
 
-        int swapIndexRow = row;
-        int swapIndexCol = col;
+        int swapIndexRow = selectedCoords.row;
+        int swapIndexCol = selectedCoords.col;
 
-        switch (dir)
+        switch (directionToChange)
         {
             case Direction.UP:
                 swapIndexRow--;
@@ -388,8 +496,8 @@ public class UnipangManager : MonoBehaviour
         if (swapIndexCol < 0 || swapIndexCol >= elementArray.GetLength(1)) return false;
 
         // 예외처리들을 뚫고 여기까지 왔다면 바꾸자
-        GameObject temp = elementArray[row, col];
-        elementArray[row, col] = elementArray[swapIndexRow, swapIndexCol];
+        GameObject temp = elementArray[selectedCoords.row, selectedCoords.col];
+        elementArray[selectedCoords.row, selectedCoords.col] = elementArray[swapIndexRow, swapIndexCol];
         elementArray[swapIndexRow, swapIndexCol] = temp;
 
         return true;
@@ -400,64 +508,54 @@ public class UnipangManager : MonoBehaviour
     public GameObject latestSwappedCoordsVisualizer2;
     void MoveVisualizers()
     {
-        latestSwappedCoordsVisualizer1.transform.position = new Vector3(latestSwappedCoords.col, -latestSwappedCoords.row, latestSwappedCoordsVisualizer1.transform.position.z);
-
-        switch (latestSwappedDirection)
-        {
-            case Direction.UP:
-                latestSwappedCoordsVisualizer2.transform.position = new Vector3(latestSwappedCoords.col, -(latestSwappedCoords.row - 1), latestSwappedCoordsVisualizer1.transform.position.z);
-                break;
-            case Direction.DOWN:
-                latestSwappedCoordsVisualizer2.transform.position = new Vector3(latestSwappedCoords.col, -(latestSwappedCoords.row + 1), latestSwappedCoordsVisualizer1.transform.position.z);
-                break;
-            case Direction.LEFT:
-                latestSwappedCoordsVisualizer2.transform.position = new Vector3(latestSwappedCoords.col - 1, -latestSwappedCoords.row, latestSwappedCoordsVisualizer1.transform.position.z);
-                break;
-            case Direction.RIGHT:
-                latestSwappedCoordsVisualizer2.transform.position = new Vector3(latestSwappedCoords.col + 1, -latestSwappedCoords.row, latestSwappedCoordsVisualizer1.transform.position.z);
-                break;
-        }
+        latestSwappedCoordsVisualizer1.transform.position = new Vector3(latestSwappedCoords1.col, -latestSwappedCoords1.row, latestSwappedCoordsVisualizer1.transform.position.z);
+        latestSwappedCoordsVisualizer2.transform.position = new Vector3(latestSwappedCoords2.col, -latestSwappedCoords2.row, latestSwappedCoordsVisualizer2.transform.position.z);
     }
+
+    HashSet<Coords> cp;
 
     void Update()
     {
-        if (Input.GetKeyDown(KeyCode.S)) // Search
+        if (Input.GetKeyDown(KeyCode.B)) // Search
         {
             // 지울 곳 검색하고 표시 + 아이템 장착
-            HashSet<Coords> coordsToPop = GetSuccessiveCoordsInArr();
+            cp = GetSuccessiveCoordsInArr();
 
-            for (int r = 0; r < elementArray.GetLength(0); r++)
+            foreach (Coords element in cp)
             {
-                foreach (Coords element in coordsToPop)
-                {
-                    if (element.row == r)
-                    {
-                        elementArray[r, element.col].GetComponent<ElementBase>().ShowAsTarget();
-                    }
-                }
+                elementArray[element.row, element.col].GetComponent<ElementBase>().ShowAsTarget();
             }
         }
 
-        if (Input.GetKeyDown(KeyCode.Space)) // Clear
+        if (Input.GetKeyDown(KeyCode.N))
+        {
+            AddItemEffectsToHashSet(cp);
+
+            foreach (Coords element in cp)
+            {
+                elementArray[element.row, element.col].GetComponent<ElementBase>().ShowAsTarget();
+            }
+        }
+
+        if (Input.GetKeyDown(KeyCode.M)) // Clear
         {
             // 표시한 것 지우기 + 터뜨려진 아이템 사용하기
-            ClearAndPushNew(GetSuccessiveCoordsInArr());
+            ClearAndPushNew(cp);
             UpdateElementCoordsInfo();
         }
 
         // 드래그로 스왑 인풋 받기
-        if (Input.GetMouseButtonDown(0))
+        if (Input.GetMouseButtonDown(0)) // 마우스 다운
         {
             Vector3 latestMouseDownPosition = myCamera.ScreenToWorldPoint(Input.mousePosition);
             latestClickedCoords.row = -(int)Mathf.Round(latestMouseDownPosition.y);
             latestClickedCoords.col = (int)Mathf.Round(latestMouseDownPosition.x);
-            Debug.Log($"latestSelectedCoords: [{latestClickedCoords.row}, {latestClickedCoords.col}]");
         }
 
-        if (0 <= latestClickedCoords.row && latestClickedCoords.row < elementArray.GetLength(0)
+        if (0 <= latestClickedCoords.row && latestClickedCoords.row < elementArray.GetLength(0) // 유효한 칸을 선택했고
             && 0 <= latestClickedCoords.col && latestClickedCoords.col < elementArray.GetLength(1))
         {
-            if (Input.GetMouseButtonUp(0))
+            if (Input.GetMouseButtonUp(0)) // 마우스 업
             {
                 Vector3 mouseUpPosition = myCamera.ScreenToWorldPoint(Input.mousePosition);
                 int rowToSwap = -(int)Mathf.Round(mouseUpPosition.y);
@@ -467,34 +565,47 @@ public class UnipangManager : MonoBehaviour
                 {
                     if (latestClickedCoords.row > rowToSwap)
                     {
-                        SwapElementsInArray(latestClickedCoords.row, latestClickedCoords.col, Direction.UP);
-                        latestSwappedDirection = Direction.UP;
+                        SwapElementsInArray(latestClickedCoords, Direction.UP);
+
+                        latestSwappedCoords1 = latestClickedCoords;
+                        latestSwappedCoords2 = latestSwappedCoords1;
+                        latestSwappedCoords2.row--;
+                        MoveVisualizers();
                     }
                     else if (latestClickedCoords.row < rowToSwap)
                     {
-                        SwapElementsInArray(latestClickedCoords.row, latestClickedCoords.col, Direction.DOWN);
-                        latestSwappedDirection = Direction.DOWN;
+                        SwapElementsInArray(latestClickedCoords, Direction.DOWN);
+
+                        latestSwappedCoords1 = latestClickedCoords;
+                        latestSwappedCoords2 = latestSwappedCoords1;
+                        latestSwappedCoords2.row++;
+                        MoveVisualizers();
                     }
-                    latestSwappedCoords = latestClickedCoords;
-                    MoveVisualizers();
                 }
                 else if (latestClickedCoords.row == rowToSwap)
                 {
                     if (latestClickedCoords.col > colToSwap)
                     {
-                        SwapElementsInArray(latestClickedCoords.row, latestClickedCoords.col, Direction.LEFT);
-                        latestSwappedDirection = Direction.LEFT;
+                        SwapElementsInArray(latestClickedCoords, Direction.LEFT);
+
+                        latestSwappedCoords1 = latestClickedCoords;
+                        latestSwappedCoords2 = latestSwappedCoords1;
+                        latestSwappedCoords2.col--;
+                        MoveVisualizers();
                     }
                     else if (latestClickedCoords.col < colToSwap)
                     {
-                        SwapElementsInArray(latestClickedCoords.row, latestClickedCoords.col, Direction.RIGHT);
-                        latestSwappedDirection = Direction.RIGHT;
+                        SwapElementsInArray(latestClickedCoords, Direction.RIGHT);
+
+                        latestSwappedCoords1 = latestClickedCoords;
+                        latestSwappedCoords2 = latestSwappedCoords1;
+                        latestSwappedCoords2.col++;
+                        MoveVisualizers();
                     }
-                    latestSwappedCoords = latestClickedCoords;
-                    MoveVisualizers();
                 }
             }
             UpdateElementCoordsInfo();
         }
+        
     }
 }

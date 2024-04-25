@@ -3,15 +3,15 @@ using Unity.VisualScripting;
 using UnityEditor.Experimental.GraphView;
 using UnityEngine;
 
-enum Direction
-{
-    UP,
-    DOWN,
-    LEFT,
-    RIGHT
-}
+//public enum Direction
+//{
+//    UP,
+//    DOWN,
+//    LEFT,
+//    RIGHT
+//}
 
-struct Coords
+public struct Coords
 {
     public int row;
     public int col;
@@ -20,6 +20,12 @@ struct Coords
     {
         this.row = row;
         col = column;
+    }
+
+    public Coords(Coords c)
+    {
+        this.row = c.row;
+        this.col = c.col;
     }
 }
 
@@ -37,14 +43,12 @@ public class UnipangManager : MonoBehaviour
     public int unipangGameRow;
     public int unipangGameCol;
 
-    // 입력 관련
-    Coords latestClickedCoords;
+    /// 게임 진행 관련
+    Coords selectedCoords;
+    Coords swapCoords;
 
-    Coords latestSwappedCoords1;
-    Coords latestSwappedCoords2;
-
-    //public bool canSwap = true;
-    //bool firstSwapActions = false; // true가 되었을때 첫 번째 스왑시에만 가능한 효과들을 발동시킬 것이다
+    public bool canSwap;
+    bool firstSwapActionsDone; // 첫 번째 스왑시에만 가능한 효과들을 발동시키고 꺼질 불변수
 
     /// 유니팡 행렬
     private GameObject[,] elementArray;
@@ -52,12 +56,12 @@ public class UnipangManager : MonoBehaviour
 
     void Start()
     {
+        canSwap = true;
+        firstSwapActionsDone = true;
+
         myCamera.transform.position = new Vector3((float)unipangGameCol / 2 - 0.5F, -(float)unipangGameRow / 2 + 0.5F, myCamera.transform.position.z);
         myCamera.orthographicSize = unipangGameCol;
         elementArray = new GameObject[unipangGameRow, unipangGameCol];
-
-        latestSwappedCoords1.row = -1;
-        latestSwappedCoords1.col = -1;
 
         // 초기화 랜덤 배정
         for (int r = 0; r < elementArray.GetLength(0); r++)
@@ -65,6 +69,7 @@ public class UnipangManager : MonoBehaviour
             for (int c = 0; c < elementArray.GetLength(1); c++)
             {
                 GameObject element = Instantiate(elementPrefab, Vector3.zero, Quaternion.identity);
+                element.transform.SetParent(transform);
 
                 // 타입 지정하기
                 element.GetComponent<ElementBase>().SetType(UnityEngine.Random.Range(0, numOfElementTypes)); // 종류 +1은 롤리팝, +2는 젤리빈이다
@@ -88,73 +93,14 @@ public class UnipangManager : MonoBehaviour
         {
             for (int c = 0; c < elementArray.GetLength(1); c++)
             {
-                elementArray[r, c].GetComponent<ElementBase>().MoveTo(r, c);
+                elementArray[r, c].GetComponent<ElementBase>().MoveTo_Instant(new Coords(r, c));
             }
         }
     }
 
     /// [유니팡 핵심 연산]
 
-    /// 02 터지는 아이템의 효과 발동
-
-    // Coords가 그리드 내의 유효한 좌표인지 확인하고 해쉬셋에 추가
-    void AddCoordsToHashSet_s(HashSet<Coords> mySet, Coords coord)
-    {
-        if (coord.row < 0) return;
-        if (elementArray.GetLength(0) <= coord.row) return;
-        if (coord.col < 0) return;
-        if (elementArray.GetLength(1) <= coord.col) return;
-
-        if (elementArray[coord.row, coord.col].GetComponent<ElementBase>().type >= numOfElementTypes) return;
-
-        mySet.Add(coord);
-    }
-
-    // 아이템이 터지면 효과를 발동해준다 (열 터뜨리기, 행 터뜨리기, 폭탄 터뜨리기) - 해쉬셋에 변화가 없으면 false를 반환한다
-    bool AddItemEffectsToHashSet(HashSet<Coords> mySet)
-    {
-        HashSet<Coords> setToBePoppedByItems = new HashSet<Coords>();
-
-        foreach (Coords element in mySet)
-        {
-            if (elementArray[element.row, element.col].GetComponent<ElementBase>().attachedItemType == AttachableItem.ROWCLEAR)
-            {
-                for (int c = 0; c < elementArray.GetLength(1); c++)
-                {
-                    AddCoordsToHashSet_s(setToBePoppedByItems, new Coords(element.row, c));
-                }
-            }
-            else if (elementArray[element.row, element.col].GetComponent<ElementBase>().attachedItemType == AttachableItem.COLUMNCLEAR)
-            {
-                for (int r = 0; r < elementArray.GetLength(0); r++)
-                {
-                    AddCoordsToHashSet_s(setToBePoppedByItems, new Coords(r, element.col));
-                }
-            }
-            else if (elementArray[element.row, element.col].GetComponent<ElementBase>().attachedItemType == AttachableItem.BOMB)
-            {
-                AddCoordsToHashSet_s(setToBePoppedByItems, new Coords(element.row - 1, element.col - 1));
-                AddCoordsToHashSet_s(setToBePoppedByItems, new Coords(element.row - 1, element.col + 0));
-                AddCoordsToHashSet_s(setToBePoppedByItems, new Coords(element.row - 1, element.col + 1));
-                AddCoordsToHashSet_s(setToBePoppedByItems, new Coords(element.row, element.col - 1));
-                AddCoordsToHashSet_s(setToBePoppedByItems, new Coords(element.row, element.col + 1));
-                AddCoordsToHashSet_s(setToBePoppedByItems, new Coords(element.row + 1, element.col - 1));
-                AddCoordsToHashSet_s(setToBePoppedByItems, new Coords(element.row + 1, element.col + 0));
-                AddCoordsToHashSet_s(setToBePoppedByItems, new Coords(element.row + 1, element.col + 1));
-            }
-        }
-
-        if (setToBePoppedByItems == null) return false;
-
-        foreach (Coords element in setToBePoppedByItems)
-        {
-            mySet.Add(element);
-        }
-
-        return true;
-    }
-    
-    /// 03 배열의 모든 3개이상 반복원소들을 검출 + 아이템 검출
+    /// 01 배열의 모든 3개이상 반복원소들을 검출 + 아이템 검출 - 스왑후 한번 실행한다
     void AddCoordsToHashSetAndAttachItem_Row(HashSet<Coords> mySet, int currentRow, int baseIndex, int succession) // succession = 2는 3연속, succession = 3은 4연속, ...
     {
         int rowClearItemIndex = -1;
@@ -299,7 +245,7 @@ public class UnipangManager : MonoBehaviour
         if (succession >= 2 && currentBase < numOfElementTypes) AddCoordsToHashSetAndAttachItem_Column(mySet, columnIndex, baseIndex, succession);
     }
 
-    HashSet<Coords> GetSuccessiveCoordsInArr()
+    HashSet<Coords> GetSuccessiveCoordsInArr() // <- 핵심 함수!
     {
         HashSet<Coords> successiveCoords = new HashSet<Coords>();
 
@@ -314,8 +260,75 @@ public class UnipangManager : MonoBehaviour
         return successiveCoords;
     }
 
-    /// 02 입력받은 자리의 원소들을 지우고 남은 원소들을 아래로 내려보낸 후, 위의 빈자리는 새 랜덤 원소로 채움
-    void ClearAndPushNew(HashSet<Coords> coordsToPop)
+    /// 02 터지는 아이템의 효과 발동 - 더이상 추가되는 아이템이 없을 때까지 연속적으로 실행
+    public bool AreCoordsValidArrayMember(Coords coords)
+    {
+        if (coords.row < 0) return false;
+        if (elementArray.GetLength(0) <= coords.row) return false;
+        if (coords.col < 0) return false;
+        if (elementArray.GetLength(1) <= coords.col) return false;
+
+        return true;
+    }
+
+    // 전달받은 좌표가 그리드 내의 유효한 좌표인지 확인하고 해당 좌표의 원소를 안전하게 해쉬셋에 추가
+    void AddCoordsToHashSet_s(HashSet<Coords> mySet, Coords coords)
+    {
+        if (!AreCoordsValidArrayMember(coords)) return;
+        if (elementArray[coords.row, coords.col].GetComponent<ElementBase>().type >= numOfElementTypes) return;
+
+        mySet.Add(coords);
+    }
+
+    // 아이템이 터지면 효과를 발동해준다 (열 터뜨리기, 행 터뜨리기, 폭탄 터뜨리기) <- 핵심 함수!
+    bool AddItemEffectsToHashSet(HashSet<Coords> mySet)
+    {
+        HashSet<Coords> setToBePoppedByItems = new HashSet<Coords>();
+
+        foreach (Coords element in mySet)
+        {
+            if (elementArray[element.row, element.col].GetComponent<ElementBase>().attachedItemType == AttachableItem.ROWCLEAR)
+            {
+                for (int c = 0; c < elementArray.GetLength(1); c++)
+                {
+                    AddCoordsToHashSet_s(setToBePoppedByItems, new Coords(element.row, c));
+                }
+                elementArray[element.row, element.col].GetComponent<ElementBase>().AttachItem(AttachableItem.NONE);
+            }
+            else if (elementArray[element.row, element.col].GetComponent<ElementBase>().attachedItemType == AttachableItem.COLUMNCLEAR)
+            {
+                for (int r = 0; r < elementArray.GetLength(0); r++)
+                {
+                    AddCoordsToHashSet_s(setToBePoppedByItems, new Coords(r, element.col));
+                }
+                elementArray[element.row, element.col].GetComponent<ElementBase>().AttachItem(AttachableItem.NONE);
+            }
+            else if (elementArray[element.row, element.col].GetComponent<ElementBase>().attachedItemType == AttachableItem.BOMB)
+            {
+                AddCoordsToHashSet_s(setToBePoppedByItems, new Coords(element.row - 1, element.col - 1));
+                AddCoordsToHashSet_s(setToBePoppedByItems, new Coords(element.row - 1, element.col));
+                AddCoordsToHashSet_s(setToBePoppedByItems, new Coords(element.row - 1, element.col + 1));
+                AddCoordsToHashSet_s(setToBePoppedByItems, new Coords(element.row, element.col - 1));
+                AddCoordsToHashSet_s(setToBePoppedByItems, new Coords(element.row, element.col + 1));
+                AddCoordsToHashSet_s(setToBePoppedByItems, new Coords(element.row + 1, element.col - 1));
+                AddCoordsToHashSet_s(setToBePoppedByItems, new Coords(element.row + 1, element.col));
+                AddCoordsToHashSet_s(setToBePoppedByItems, new Coords(element.row + 1, element.col + 1));
+
+                elementArray[element.row, element.col].GetComponent<ElementBase>().AttachItem(AttachableItem.NONE);
+            }
+        }
+
+        if (setToBePoppedByItems.Count == 0) return false;
+
+        foreach (Coords element in setToBePoppedByItems)
+        {
+            mySet.Add(element);
+        }
+        return true;
+    }
+
+    /// 03 입력받은 자리의 원소들을 지우고 남은 원소들을 아래로 내려보낸 후, 위의 빈자리는 새 랜덤 원소로 채움 - 아이템 효과를 전부 마친 후 한 번 실행한다
+    void ClearAndPushNew(HashSet<Coords> coordsToPop) // <- 핵심 함수!
     {
         if (coordsToPop.Count == 0) return;
 
@@ -354,6 +367,7 @@ public class UnipangManager : MonoBehaviour
             {
                 // 원소 오브젝트 생성
                 GameObject element = Instantiate(elementPrefab, Vector3.zero, Quaternion.identity);
+                element.transform.SetParent(transform);
 
                 // 타입 지정하기
                 element.GetComponent<ElementBase>().SetType(UnityEngine.Random.Range(0, numOfElementTypes));
@@ -363,12 +377,12 @@ public class UnipangManager : MonoBehaviour
                 elementArray[r, c] = element;
 
                 // 해당 위치로 옮기기
-                element.GetComponent<ElementBase>().MoveTo(r, c);
+                element.GetComponent<ElementBase>().MoveTo_Instant(new Coords(r, c));
             }
         }
     }
 
-    /// 03 한번의 스왑으로 연속이 생길수 있나 판별하는 함수 (아직 테스트 안해봄)
+    /// 04 한번의 스왑으로 연속이 생길수 있나 판별하는 함수 (아직 테스트 안해봄)
     bool SuccessionExistsInRow(int rowIndex)
     {
         int baseIndex = 0;
@@ -432,16 +446,16 @@ public class UnipangManager : MonoBehaviour
         {
             for (int c = 0; c < elementArray.GetLength(1) - 1; c++)
             {
-                SwapElementsInArray(new Coords(r, c), Direction.RIGHT);
+                SwapElementsInArray(new Coords(r, c), new Coords(r, c + 1));
 
                 if (SuccessionExistsInRow(r) || SuccessionExistsInColumn(c) || SuccessionExistsInColumn(c + 1))
                 {
                     // 찾으면 배열을 원래대로 되돌려 놓고 return true
-                    SwapElementsInArray(new Coords(r, c), Direction.RIGHT);
+                    SwapElementsInArray(new Coords(r, c), new Coords(r, c + 1));
                     return true;
                 }
                 // 못찾아도 되돌려 놓기
-                SwapElementsInArray(new Coords(r, c), Direction.RIGHT);
+                SwapElementsInArray(new Coords(r, c), new Coords(r, c + 1));
             }
         }
 
@@ -450,162 +464,147 @@ public class UnipangManager : MonoBehaviour
         {
             for (int r = 0; r < elementArray.GetLength(0) - 1; r++)
             {
-                SwapElementsInArray(new Coords(r, c), Direction.DOWN);
+                SwapElementsInArray(new Coords(r, c), new Coords(r + 1, c));
 
                 if (SuccessionExistsInColumn(c) || SuccessionExistsInRow(r) || SuccessionExistsInRow(r + 1))
                 {
                     // 찾으면 배열을 원래대로 되돌려 놓고 return true
-                    SwapElementsInArray(new Coords(r, c), Direction.DOWN);
+                    SwapElementsInArray(new Coords(r, c), new Coords(r + 1, c));
                     return true;
                 }
                 // 못찾아도 되돌려 놓기
-                SwapElementsInArray(new Coords(r, c), Direction.DOWN);
+                SwapElementsInArray(new Coords(r, c), new Coords(r + 1, c));
             }
         }
 
         return false;
     }
 
-    /// [게임 진행 관련]
-    bool SwapElementsInArray(Coords selectedCoords, Direction directionToChange)
+    /// 05 판에 연속이 존재하는지?
+    bool SuccessionExists()
     {
-        // 예외처리들
-        if (selectedCoords.row < 0 || selectedCoords.row >= elementArray.GetLength(0)) return false;
-        if (selectedCoords.col < 0 || selectedCoords.col >= elementArray.GetLength(1)) return false;
-
-        int swapIndexRow = selectedCoords.row;
-        int swapIndexCol = selectedCoords.col;
-
-        switch (directionToChange)
+        // 행별 검사
+        for (int r = 0; r < elementArray.GetLength(0); r++)
         {
-            case Direction.UP:
-                swapIndexRow--;
-                break;
-            case Direction.DOWN:
-                swapIndexRow++;
-                break;
-            case Direction.LEFT:
-                swapIndexCol--;
-                break;
-            case Direction.RIGHT:
-                swapIndexCol++;
-                break;
+            if (SuccessionExistsInRow(r)) return true;
         }
 
-        if (swapIndexRow < 0 || swapIndexRow >= elementArray.GetLength(0)) return false;
-        if (swapIndexCol < 0 || swapIndexCol >= elementArray.GetLength(1)) return false;
+        // 열별 검사
+        for (int c = 0; c < elementArray.GetLength(1); c++)
+        {
+            if (SuccessionExistsInColumn(c)) return true;
+        }
+
+        return false;
+    }
+    
+    /// [게임 진행 관련]
+    
+    // 배열상의 실제 게임오브젝트를 스왑
+    bool SwapElementsInArray(Coords selectedCoords, Coords swapCoords)
+    {
+        // 예외처리
+        if (AreCoordsValidArrayMember(selectedCoords) == false) return false; // 선택한 좌표가 배열내 유효한 좌표가 아님
+        if (AreCoordsValidArrayMember(swapCoords) == false) return false; // 바꾸려는 좌표가 배열내 유효한 좌표가 아님
+
+        if ((selectedCoords.row - swapCoords.row) * (selectedCoords.row - swapCoords.row)
+            + (selectedCoords.col - swapCoords.col) * (selectedCoords.col - swapCoords.col) != 1)
+            return false; // 선택한 좌표와 바꾸려는 좌표가 인접하지 않음
 
         // 예외처리들을 뚫고 여기까지 왔다면 바꾸자
         GameObject temp = elementArray[selectedCoords.row, selectedCoords.col];
-        elementArray[selectedCoords.row, selectedCoords.col] = elementArray[swapIndexRow, swapIndexCol];
-        elementArray[swapIndexRow, swapIndexCol] = temp;
+        elementArray[selectedCoords.row, selectedCoords.col] = elementArray[swapCoords.row, swapCoords.col];
+        elementArray[swapCoords.row, swapCoords.col] = temp;
+
+        UpdateElementCoordsInfo();
 
         return true;
     }
 
-    // 테스트
+    // 외부에서 인풋을 받는용도의 함수 "selectedCoords와 swapCoords를 바꿔주세요"
+    public bool ReceiveSwapInput(Coords selectedCoords, Coords swapCoords)
+    {
+        if (!canSwap) return false; // 지금은 인풋을 받는 상태가 아닙니다
+
+        if (SwapElementsInArray(selectedCoords, swapCoords))
+        {
+            this.selectedCoords = selectedCoords;
+            this.swapCoords = swapCoords;
+
+            MoveVisualizers();
+
+            canSwap = false;
+            firstSwapActionsDone = false;
+
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+    
+    // 디버그용
     public GameObject latestSwappedCoordsVisualizer1;
     public GameObject latestSwappedCoordsVisualizer2;
     void MoveVisualizers()
     {
-        latestSwappedCoordsVisualizer1.transform.position = new Vector3(latestSwappedCoords1.col, -latestSwappedCoords1.row, latestSwappedCoordsVisualizer1.transform.position.z);
-        latestSwappedCoordsVisualizer2.transform.position = new Vector3(latestSwappedCoords2.col, -latestSwappedCoords2.row, latestSwappedCoordsVisualizer2.transform.position.z);
+        latestSwappedCoordsVisualizer1.transform.position = new Vector3(selectedCoords.col, -selectedCoords.row, latestSwappedCoordsVisualizer1.transform.position.z);
+        latestSwappedCoordsVisualizer2.transform.position = new Vector3(swapCoords.col, -swapCoords.row, latestSwappedCoordsVisualizer2.transform.position.z);
+    }
+
+    void ShowCoordsToPop(HashSet<Coords> coordsToPop)
+    {
+        foreach (Coords element in coordsToPop)
+        {
+            elementArray[element.row, element.col].GetComponent<ElementBase>().ShowAsTarget();
+        }
     }
 
     HashSet<Coords> cp;
 
     void Update()
     {
-        if (Input.GetKeyDown(KeyCode.B)) // Search
-        {
-            // 지울 곳 검색하고 표시 + 아이템 장착
-            cp = GetSuccessiveCoordsInArr();
+        if (canSwap) return;
 
-            foreach (Coords element in cp)
+        if (!firstSwapActionsDone) // 스왑 직후 검사해야하는 것들
+        {
+            /// 젤리빈 검사
+            // 한쪽만 젤리빈이면?
+            // 두개다 젤리빈이면?
+
+            if (!SuccessionExists())
             {
-                elementArray[element.row, element.col].GetComponent<ElementBase>().ShowAsTarget();
+                Debug.Log("NOTE: 유효하지 않은 스왑");
+
+                // 다시 바꿔놓기
+                bool result = SwapElementsInArray(selectedCoords, swapCoords);
+                if (!result) Debug.Log("ERR: 유효하지 않은 스왑인데 되돌려놓는데 실패했다");
+
+                canSwap = true;
             }
+
+            firstSwapActionsDone = true;
         }
-
-        if (Input.GetKeyDown(KeyCode.N))
+        else
         {
-            AddItemEffectsToHashSet(cp);
-
-            foreach (Coords element in cp)
+            while (SuccessionExists())
             {
-                elementArray[element.row, element.col].GetComponent<ElementBase>().ShowAsTarget();
-            }
-        }
+                cp = GetSuccessiveCoordsInArr(); //B
 
-        if (Input.GetKeyDown(KeyCode.M)) // Clear
-        {
-            // 표시한 것 지우기 + 터뜨려진 아이템 사용하기
-            ClearAndPushNew(cp);
-            UpdateElementCoordsInfo();
-        }
-
-        // 드래그로 스왑 인풋 받기
-        if (Input.GetMouseButtonDown(0)) // 마우스 다운
-        {
-            Vector3 latestMouseDownPosition = myCamera.ScreenToWorldPoint(Input.mousePosition);
-            latestClickedCoords.row = -(int)Mathf.Round(latestMouseDownPosition.y);
-            latestClickedCoords.col = (int)Mathf.Round(latestMouseDownPosition.x);
-        }
-
-        if (0 <= latestClickedCoords.row && latestClickedCoords.row < elementArray.GetLength(0) // 유효한 칸을 선택했고
-            && 0 <= latestClickedCoords.col && latestClickedCoords.col < elementArray.GetLength(1))
-        {
-            if (Input.GetMouseButtonUp(0)) // 마우스 업
-            {
-                Vector3 mouseUpPosition = myCamera.ScreenToWorldPoint(Input.mousePosition);
-                int rowToSwap = -(int)Mathf.Round(mouseUpPosition.y);
-                int colToSwap = (int)Mathf.Round(mouseUpPosition.x);
-
-                if (latestClickedCoords.col == colToSwap)
+                //N
+                bool unusedItemsExist = true;
+                while (unusedItemsExist)
                 {
-                    if (latestClickedCoords.row > rowToSwap)
-                    {
-                        SwapElementsInArray(latestClickedCoords, Direction.UP);
-
-                        latestSwappedCoords1 = latestClickedCoords;
-                        latestSwappedCoords2 = latestSwappedCoords1;
-                        latestSwappedCoords2.row--;
-                        MoveVisualizers();
-                    }
-                    else if (latestClickedCoords.row < rowToSwap)
-                    {
-                        SwapElementsInArray(latestClickedCoords, Direction.DOWN);
-
-                        latestSwappedCoords1 = latestClickedCoords;
-                        latestSwappedCoords2 = latestSwappedCoords1;
-                        latestSwappedCoords2.row++;
-                        MoveVisualizers();
-                    }
+                    unusedItemsExist = AddItemEffectsToHashSet(cp);
                 }
-                else if (latestClickedCoords.row == rowToSwap)
-                {
-                    if (latestClickedCoords.col > colToSwap)
-                    {
-                        SwapElementsInArray(latestClickedCoords, Direction.LEFT);
 
-                        latestSwappedCoords1 = latestClickedCoords;
-                        latestSwappedCoords2 = latestSwappedCoords1;
-                        latestSwappedCoords2.col--;
-                        MoveVisualizers();
-                    }
-                    else if (latestClickedCoords.col < colToSwap)
-                    {
-                        SwapElementsInArray(latestClickedCoords, Direction.RIGHT);
-
-                        latestSwappedCoords1 = latestClickedCoords;
-                        latestSwappedCoords2 = latestSwappedCoords1;
-                        latestSwappedCoords2.col++;
-                        MoveVisualizers();
-                    }
-                }
+                //M
+                ClearAndPushNew(cp);
             }
+
             UpdateElementCoordsInfo();
+            canSwap = true;
         }
-        
     }
 }

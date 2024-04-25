@@ -3,18 +3,8 @@ using UnityEngine;
 
 /// 이들은 유니팡매니저가 시키는대로 움직일 뿐, 유니팡매니저를 모름
 
-public struct ArrayCoords
-{
-    public int row;
-    public int col;
-
-    public ArrayCoords(int r, int c)
-    {
-        row = r;
-        col = c;
-    }
-}
-
+// 붙일 수 있는 아이템들의 목록
+// * 젤리빈과 롤리팝은 일반 타입 원소들에 붙일 수 있는 아이템이 아닌, 별개 타입의 아이템으로 취급
 public enum AttachableItem
 {
     ROWCLEAR,
@@ -41,27 +31,30 @@ public class ElementBase : MonoBehaviour
     private GameObject targetSignObject;
 
     /// 원소의 정보
-    public ArrayCoords arrayCoords;
+    public Coords positionInUnipang;
     public int type;
 
     // 아이템인지 여부
     public AttachableItem attachedItemType = AttachableItem.NONE;
     private GameObject attachedItemObject;
 
+    // 움직임 테스트
+
     void Awake()
     {
         spriteRenderer = GetComponent<SpriteRenderer>();
     }
 
-    public void MoveTo(int row, int col)
+    // 이펙트 없이 뿅 이동
+    public void MoveTo_Instant(Coords coordsToMoveTo)
     {
-        arrayCoords.row = row;
-        arrayCoords.col = col;
-
-        transform.position = new Vector3(col, -row, transform.position.z);
+        positionInUnipang = coordsToMoveTo;
+        transform.position = new Vector3(positionInUnipang.col, -positionInUnipang.row, transform.position.z);
     }
 
-    public void SetType(int n)
+    // 등속 직선 운동으로 이동
+
+    public void SetType(int n) // 타입 지정하기
     {
         type = n;
 
@@ -83,7 +76,7 @@ public class ElementBase : MonoBehaviour
         }
     }
 
-    public void AttachItem(AttachableItem i)
+    public void AttachItem(AttachableItem i) // 아이템 붙이기
     {
         if (type >= elementSprites.Length) return;
 
@@ -112,7 +105,7 @@ public class ElementBase : MonoBehaviour
         attachedItemType = i;
     }
 
-    // 테스트용
+    // 디버깅용
     public void ShowAsTarget()
     {
         if (targetSignObject == null)
@@ -132,5 +125,9 @@ public class ElementBase : MonoBehaviour
         {
             targetSignObject.SetActive(false);
         }
+    }
+
+    void Update()
+    {
     }
 }

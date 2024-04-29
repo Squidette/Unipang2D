@@ -1,5 +1,8 @@
+using Unity.VisualScripting;
 using UnityEditor.Experimental.GraphView;
 using UnityEngine;
+using UnityEngine.Experimental.GlobalIllumination;
+using static UnityEngine.RuleTile.TilingRuleOutput;
 
 /// 이들은 유니팡매니저가 시키는대로 움직일 뿐, 유니팡매니저를 모름
 
@@ -17,6 +20,7 @@ public class ElementBase : MonoBehaviour
 {
     // Component
     SpriteRenderer spriteRenderer;
+    Rigidbody2D rigid2D;
 
     public Sprite[] elementSprites;
     public Sprite jellyBeanSprite;
@@ -38,18 +42,48 @@ public class ElementBase : MonoBehaviour
     public AttachableItem attachedItemType = AttachableItem.NONE;
     private GameObject attachedItemObject;
 
-    // 움직임 테스트
+    // 작아지다가 사라지기
+    bool isDwindling;
+    float dwindleSpeed = 8.0F; // 약 1초의 1/8인인 0.125초만에 사라지는겁니다
+    float minScale = 0.01F;
+
+    // 떨어지기
+    bool isFalling;
 
     void Awake()
     {
         spriteRenderer = GetComponent<SpriteRenderer>();
+        rigid2D = GetComponent<Rigidbody2D>();
+    }
+
+    // 작아지기 (사라지기 위한 것)
+    public void ScaleDown(float time)
+    {
+        if (!spriteRenderer.enabled) return;
+        isDwindling = true;
+    }
+
+    // 자리 지정
+    public void AssignNewPosition(Coords newPosition)
+    {
+        positionInUnipang = newPosition;
     }
 
     // 이펙트 없이 뿅 이동
-    public void MoveTo_Instant(Coords coordsToMoveTo)
+    public void MoveToPosition_Instant()
     {
-        positionInUnipang = coordsToMoveTo;
         transform.position = new Vector3(positionInUnipang.col, -positionInUnipang.row, transform.position.z);
+    }
+
+    // 떨어지기
+    public void MoveToPosition_FallDown(float time, int liftLength = 0)
+    {
+        transform.position = new Vector3(positionInUnipang.col, transform.position.y + liftLength, transform.position.z);
+
+        if (isFalling) return;
+        rigid2D.velocity = Vector3.zero;
+        rigid2D.simulated = true;
+        isFalling = true;
     }
 
     // 등속 직선 운동으로 이동
@@ -129,5 +163,26 @@ public class ElementBase : MonoBehaviour
 
     void Update()
     {
+        if (isDwindling)
+        {
+            transform.localScale -= new Vector3(dwindleSpeed * Time.deltaTime, dwindleSpeed * Time.deltaTime, 1.0F);
+
+            if (transform.localScale.x <= minScale)
+            {
+                transform.localScale = new Vector3(0.0F, 0.0F, 1.0F);
+                spriteRenderer.enabled = false;
+                isDwindling = false;
+            }
+        }
+
+        if (isFalling)
+        {
+            if (transform.position.y <= -positionInUnipang.row)
+            {
+                rigid2D.simulated = false;
+                isFalling = false;
+                MoveToPosition_Instant();
+            }
+        }
     }
 }

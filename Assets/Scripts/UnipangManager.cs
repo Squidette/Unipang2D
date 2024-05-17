@@ -1,15 +1,6 @@
 using System.Collections.Generic;
 using Unity.VisualScripting;
-using UnityEditor.Experimental.GraphView;
 using UnityEngine;
-
-//public enum Direction
-//{
-//    UP,
-//    DOWN,
-//    LEFT,
-//    RIGHT
-//}
 
 public struct Coords
 {
@@ -47,8 +38,10 @@ public class UnipangManager : MonoBehaviour
     Coords selectedCoords;
     Coords swapCoords;
 
-    public bool canSwap;
-    //bool firstSwapActionsDone; // 첫 번째 스왑시에만 가능한 효과들을 발동시키고 꺼질 불변수
+    public bool canSwap; // 스왑을 받을 수 있는가? FALSE면 애니팡 연산이 돌아가고 있다는 뜻, TRUE면 연산을 끝내고 스왑을 기다린다는 뜻
+    int actionLevel;
+    bool firstSwapActionsDone; // 첫 번째 스왑시에만 가능한 효과들을 발동시키고 꺼질 불변수
+
 
     /// 유니팡 행렬
     private GameObject[,] elementArray;
@@ -57,7 +50,7 @@ public class UnipangManager : MonoBehaviour
     void Start()
     {
         canSwap = true;
-        //firstSwapActionsDone = true;
+        firstSwapActionsDone = true;
 
         myCamera.transform.position = new Vector3((float)unipangGameCol / 2 - 0.5F, -(float)unipangGameRow / 2 + 0.5F, myCamera.transform.position.z);
         myCamera.orthographicSize = unipangGameCol;
@@ -360,7 +353,7 @@ public class UnipangManager : MonoBehaviour
                         elementArray[r, c] = elementArray[r + emptySpace, c];
                         elementArray[r + emptySpace, c] = temp;
                         elementArray[r + emptySpace, c].GetComponent<ElementBase>().AssignNewPosition(new Coords(r + emptySpace, c));
-                        elementArray[r + emptySpace, c].GetComponent<ElementBase>().MoveToPosition_FallDown(1.0F);
+                        elementArray[r + emptySpace, c].GetComponent<ElementBase>().MoveToPosition_FallDown();
                     }
                 }
             }
@@ -381,7 +374,7 @@ public class UnipangManager : MonoBehaviour
 
                 elementArray[r, c].GetComponent<ElementBase>().AssignNewPosition(new Coords(r, c));
                 elementArray[r, c].GetComponent<ElementBase>().MoveToPosition_Instant();
-                elementArray[r, c].GetComponent<ElementBase>().MoveToPosition_FallDown(1.0F, rowToErase.Count);
+                elementArray[r, c].GetComponent<ElementBase>().MoveToPosition_FallDown(rowToErase.Count);
             }
         }
     }
@@ -538,7 +531,7 @@ public class UnipangManager : MonoBehaviour
             MoveVisualizers();
 
             canSwap = false;
-            //firstSwapActionsDone = false;
+            firstSwapActionsDone = false;
 
             return true;
         }
@@ -557,48 +550,59 @@ public class UnipangManager : MonoBehaviour
         latestSwappedCoordsVisualizer2.transform.position = new Vector3(swapCoords.col, -swapCoords.row, latestSwappedCoordsVisualizer2.transform.position.z);
     }
 
-    void ShowCoordsToPop(HashSet<Coords> coordsToPop)
-    {
-        foreach (Coords element in coordsToPop)
-        {
-            elementArray[element.row, element.col].GetComponent<ElementBase>().ShowAsTarget();
-        }
-    }
-
     HashSet<Coords> cp;
 
     void Update()
     {
         if (canSwap) return;
 
-        if (Input.GetKeyDown(KeyCode.B)) // Search
+        switch (actionLevel)
         {
-            // 지울 곳 검색하고 표시 + 아이템 검출
-            cp = GetSuccessiveCoordsInArr();
-
-            foreach (Coords element in cp)
-            {
-                elementArray[element.row, element.col].GetComponent<ElementBase>().ShowAsTarget();
-                elementArray[element.row, element.col].GetComponent<ElementBase>().ScaleDown(1.0F);
-            }
+            case 0: // (WAIT) 스왑한 곳으로 가는 애니메이션
+                /*if (done)*/actionLevel = 20;
+                break;
+            case 10: // 젤리빈인가?
+                break;
+            case 20: // 유효한 스왑인지 판정
+                break;
+            case 21: // (WAIT) 되돌려놓는 애니메이션
+                break;
+            default:
+                Debug.Log("actionLevel 값이 이상한 것 같다");
+                break;
         }
 
-        if (Input.GetKeyDown(KeyCode.N))
-        {
-            AddItemEffectsToHashSet(cp);
+        //if (Input.GetKeyDown(KeyCode.B)) // Search
+        //{
+        //    // 지울 곳 검색하고 표시 + 아이템 검출
+        //    cp = GetSuccessiveCoordsInArr();
 
-            foreach (Coords element in cp)
-            {
-                elementArray[element.row, element.col].GetComponent<ElementBase>().ShowAsTarget();
-                elementArray[element.row, element.col].GetComponent<ElementBase>().ScaleDown(1.0F);
-            }
-        }
+        //    // 터지는 효과
 
-        if (Input.GetKeyDown(KeyCode.M)) // Clear
-        {
-            // 표시한 것 지우기 + 터뜨려진 아이템 사용하기
-            ClearAndPushNew(cp);
-            if (!SuccessionExists()) canSwap = true;
-        }
+        //    foreach (Coords element in cp)
+        //    {
+        //        elementArray[element.row, element.col].GetComponent<ElementBase>().ShowAsTarget();
+        //        elementArray[element.row, element.col].GetComponent<ElementBase>().Dwindle();
+        //    }
+        //}
+
+        //if (Input.GetKeyDown(KeyCode.N))
+        //{
+        //    // 해쉬셋에 아이템의 효과 추가하기
+        //    AddItemEffectsToHashSet(cp);
+
+        //    foreach (Coords element in cp)
+        //    {
+        //        elementArray[element.row, element.col].GetComponent<ElementBase>().ShowAsTarget();
+        //        elementArray[element.row, element.col].GetComponent<ElementBase>().Dwindle();
+        //    }
+        //}
+
+        //if (Input.GetKeyDown(KeyCode.M)) // Clear
+        //{
+        //    // 표시한 것 지우기 + 터뜨려진 아이템 사용하기
+        //    ClearAndPushNew(cp);
+        //    if (!SuccessionExists()) canSwap = true;
+        //}
     }
 }

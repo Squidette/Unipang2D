@@ -1,8 +1,4 @@
-using Unity.VisualScripting;
-using UnityEditor.Experimental.GraphView;
 using UnityEngine;
-using UnityEngine.Experimental.GlobalIllumination;
-using static UnityEngine.RuleTile.TilingRuleOutput;
 
 /// 이들은 유니팡매니저가 시키는대로 움직일 뿐, 유니팡매니저를 모름
 
@@ -57,7 +53,7 @@ public class ElementBase : MonoBehaviour
     }
 
     // 작아지기 (사라지기 위한 것)
-    public void ScaleDown(float time)
+    public void Dwindle()
     {
         if (!spriteRenderer.enabled) return;
         isDwindling = true;
@@ -76,7 +72,7 @@ public class ElementBase : MonoBehaviour
     }
 
     // 떨어지기
-    public void MoveToPosition_FallDown(float time, int liftLength = 0)
+    public void MoveToPosition_FallDown(int liftLength = 0)
     {
         transform.position = new Vector3(positionInUnipang.col, transform.position.y + liftLength, transform.position.z);
 
@@ -85,8 +81,6 @@ public class ElementBase : MonoBehaviour
         rigid2D.simulated = true;
         isFalling = true;
     }
-
-    // 등속 직선 운동으로 이동
 
     public void SetType(int n) // 타입 지정하기
     {
